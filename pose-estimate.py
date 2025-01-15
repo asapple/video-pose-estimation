@@ -48,6 +48,21 @@ def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view
                             cv2.VideoWriter_fourcc(*'mp4v'), 30,
                             (resize_width, resize_height))
 
+        # TODO：替换成OSS获取的图片
+        background_path = "background.png"
+        background = cv2.imread(background_path)  # Read the background image
+
+        if background is None:
+            print(f"Error: Unable to load background image from {background_path}")
+            return
+        background = cv2.cvtColor(background, cv2.COLOR_BGR2RGB)  # 转换为 RGB 作为背景
+        background = letterbox(background, (frame_width), stride=64, auto=True)[0]
+        background = background.copy()
+        background = transforms.ToTensor()(background)
+        background = torch.tensor(np.array([background.numpy()]))
+        background = background.to(device)  #convert image data to device
+        background = background.float() #convert image to float precision (cpu)
+
         while(cap.isOpened): #loop until cap opened or video not complete
         
             print("Frame {} Processing".format(frame_count+1))
@@ -78,7 +93,8 @@ def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view
             
                 output = output_to_keypoint(output_data)
 
-                im0 = image[0].permute(1, 2, 0) * 255 # Change format [b, c, h, w] to [h, w, c] for displaying the image.
+                # im0 = image[0].permute(1, 2, 0) * 255 # 使用原始帧； Change format [b, c, h, w] to [h, w, c] for displaying the image.
+                im0 = background[0].permute(1, 2, 0) * 255 # 使用背景图片；Change format [b, c, h, w] to [h, w, c] for displaying the image.
                 im0 = im0.cpu().numpy().astype(np.uint8)
                 
                 im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR) #reshape image format to (BGR)
