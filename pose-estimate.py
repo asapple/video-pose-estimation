@@ -10,10 +10,11 @@ from utils.torch_utils import select_device
 from models.experimental import attempt_load
 from utils.general import non_max_suppression_kpt,strip_optimizer,xyxy2xywh
 from utils.plots import output_to_keypoint, plot_skeleton_kpts,colors,plot_one_box_kpt
+import subprocess
 
 @torch.no_grad()
 def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view_img=False,
-        save_conf=False,line_thickness = 3,hide_labels=False, hide_conf=True):
+        save_conf=False,line_thickness = 3,hide_labels=False, hide_conf=True, rtmp_url=None):
 
     frame_count = 0  #count no of frames
     total_fps = 0  #count total fps
@@ -40,7 +41,24 @@ def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view
         frame_width = int(cap.get(3))  #get video frame width
         frame_height = int(cap.get(4)) #get video frame height
 
-        
+        # 开启 FFmpeg 推流管道
+        ffmpeg_process = subprocess.Popen(
+            [
+                'ffmpeg',
+                '-y',  # 覆盖输出文件
+                '-f', 'rawvideo',  # 输入格式
+                '-pix_fmt', 'bgr24',  # 像素格式
+                '-s', f"{frame_width}x{frame_height}",  # 分辨率
+                '-r', '30',  # 帧率
+                '-i', '-',  # 标识标准输入
+                '-c:v', 'libx264',  # 视频编码器
+                '-preset', 'ultrafast',  # 快速预设
+                '-f', 'flv',  # 输出格式
+                "rtmp://127.0.0.1/live/test"  # RTMP 地址
+            ],
+            stdin=subprocess.PIPE  # 输入管道
+        )
+
         vid_write_image = letterbox(cap.read()[1], (frame_width), stride=64, auto=True)[0] #init videowriter
         resize_height, resize_width = vid_write_image.shape[:2]
         out_video_name = f"{source.split('/')[-1].split('.')[0]}"
@@ -124,6 +142,9 @@ def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view
                 fps_list.append(total_fps) #append FPS in list
                 time_list.append(end_time - start_time) #append time in list
                 
+                ffimg = cv2.resize(im0, (frame_width, frame_height))  # 调整尺寸
+                ffmpeg_process.stdin.write(ffimg.tobytes())
+
                 # Stream results
                 if view_img:
                     cv2.imshow("YOLOv7 Pose Estimation Demo", im0)
@@ -134,6 +155,9 @@ def run(poseweights="yolov7-w6-pose.pt",source="football1.mp4",device='cpu',view
             else:
                 break
 
+        # 结束流时清理资源
+        ffmpeg_process.stdin.close()
+        ffmpeg_process.wait()
         cap.release()
         # cv2.destroyAllWindows()
         avg_fps = total_fps / frame_count
@@ -153,6 +177,8 @@ def parse_opt():
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)') #box linethickness
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels') #box hidelabel
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences') #boxhideconf
+    parser.add_argument('--rtmp-url', type=str, default=None, help='RTMP URL for live streaming')
+
     opt = parser.parse_args()
     return opt
 
