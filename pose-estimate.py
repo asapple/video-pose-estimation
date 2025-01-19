@@ -3,17 +3,18 @@ import time
 import torch
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
+import os
 from torchvision import transforms
 from utils.datasets import letterbox
 from utils.torch_utils import select_device
 from models.experimental import attempt_load
 from utils.general import non_max_suppression_kpt, strip_optimizer, xyxy2xywh
 from utils.plots import output_to_keypoint, plot_skeleton_kpts, colors, plot_one_box_kpt
+from download_image import get_or_download_image  # 导入下载图片功能
 
 @torch.no_grad()
 def run(poseweights="yolov7-w6-pose.pt", source="football1.mp4", device='cpu', view_img=False,
-        save_conf=False, line_thickness=3, hide_labels=False, hide_conf=True, output="output/video_output.mp4", background_type='origin'):
+        save_conf=False, line_thickness=3, hide_labels=False, hide_conf=True, output="output/video_output.mp4", background_type='origin', device_id="default"):
     frame_count = 0  # count no of frames
     total_fps = 0  # count total fps
     time_list = []  # list to store time
@@ -45,7 +46,7 @@ def run(poseweights="yolov7-w6-pose.pt", source="football1.mp4", device='cpu', v
     # Load background image if type is 'hidden'
     background = None
     if background_type == 'hidden':
-        background_path = "background.png"
+        background_path = get_or_download_image(device_id)  # Get image path using the new function
         background = cv2.imread(background_path)  # Read the background image
 
         if background is None:
@@ -152,6 +153,7 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')  # box hide conf
     parser.add_argument('--output', type=str, default='output/video_output.mp4', help='output video file path')  # output file path
     parser.add_argument('--background_type', type=str, default='origin', choices=['origin', 'hidden'], help='background type: origin or hidden')  # background type
+    parser.add_argument('--device_id', type=str, required=True, help="Device ID for background image")  # device id
     opt = parser.parse_args()
     return opt
 
