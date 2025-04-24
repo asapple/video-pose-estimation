@@ -6,7 +6,7 @@ from shutil import copyfile
 import argparse
 
 # 配置
-API_URL = "http://localhost:8080/stickman/background/getImg"  # 后端接口URL
+API_URL = "http://121.41.239.240:8080/stickman/background/getImg"  # 后端接口URL
 CACHE_DIR = "image"  # 本地缓存目录
 CACHE_EXPIRY_TIME = timedelta(days=1)  # 缓存有效期为1天
 DEFAULT_BLANK_IMAGE = "default_blank.jpg"  # 本地默认空白图片路径

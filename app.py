@@ -3,10 +3,17 @@ import threading
 import os
 import subprocess
 import time
-import signal
+import logging
 from datetime import datetime
 
 app = Flask(__name__)
+
+# 初始化日志配置
+logging.basicConfig(
+    filename='video_pose_detect.log',  # 日志文件名
+    level=logging.INFO,  # 日志级别
+    format='%(asctime)s - %(levelname)s - %(message)s'  # 日志格式
+)
 
 # 存储每个设备的背景类型映射
 device_background_types = {}
@@ -18,7 +25,8 @@ if not os.path.exists('output'):
     os.makedirs('output')
 
 # 存储正在运行的进程（按设备ID分类）
-running_processes = {}
+running_processes = {} # 火柴人检测
+running_hidden_processes = {} # 隐去人像进程
 
 # RTSP流处理与关键点检测推理函数
 def process_video(device_id, rtsp_url):
@@ -26,19 +34,53 @@ def process_video(device_id, rtsp_url):
     background_type = device_background_types.get(device_id, "origin")  # 默认使用"origin"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # 原图像输出文件
     output_file = f'output/{device_id}_{timestamp}.mp4'
-
+    # 隐去人像文件
+    outputHidden_file = f'output/{device_id}_{timestamp}_hidden.mp4'
+    if device_id in running_processes:
+        logging.info(f"设备{device_id} 的进程已启动")
+        process = running_processes[device_id]
+        process.terminate()  # 发送终止信号
+        running_processes.pop(device_id, None)  # 移除进程记录
+    if device_id in running_hidden_processes:
+        processHidden = running_hidden_processes[device_id]
+        processHidden.terminate()  # 发送终止信号
+        running_hidden_processes.pop(device_id,None)
+    if len(running_processes) > 5:
+        logging.info("设备数已超过5")
     try:
-        process = subprocess.Popen(["python", "pose-estimate.py", "--source", rtsp_url, "--device", 'cpu', "--output", output_file, "--background_type", background_type, "--device_id", device_id])
+        process = subprocess.Popen(["python", "pose-estimate.py","--poseweights", "/home/qiaoshikeji/video-pose-estimation/yolov7-w6-pose.pt", 
+                                    "--source", rtsp_url, "--device", "0", "--output", output_file, "--background_type", "origin", "--device_id", device_id])
+        processHidden = subprocess.Popen(["python", "pose-estimate.py" ,"--poseweights", "/home/qiaoshikeji/video-pose-estimation/yolov7-w6-pose.pt",
+                                          "--source", rtsp_url, "--device", "0", "--output", outputHidden_file, "--background_type", "hidden", "--device_id", device_id])
         running_processes[device_id] = process  # 存储进程对象
-        print(f"处理视频流，设备ID: {device_id}, 输出文件: {output_file}")
+        running_hidden_processes[device_id] = processHidden
+        logging.info(f"处理视频流，设备ID: {device_id}, 输出文件: {output_file}")
         process.wait()  # 等待进程完成
+        processHidden.wait()  # 等待进程完成
     except subprocess.CalledProcessError as e:
-        print(f"调用pose-estimate.py时出错: {e}")
+        logging.error(f"调用pose-estimate.py时出错: {e}")
     finally:
         # 处理完成后移除进程对象
         running_processes.pop(device_id, None)
+        running_hidden_processes.pop(device_id, None)
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            logging.info(f"删除:{output_file}")
+        if os.path.exists(outputHidden_file):
+            os.remove(outputHidden_file)
+            logging.info(f"删除:{outputHidden_file}")
 
+def close_process(device_id):
+    # 获取正在运行的进程并终止它
+    process = running_processes[device_id]
+    process.terminate()  # 发送终止信号
+    running_processes.pop(device_id, None)  # 移除进程记录
+
+    processHidden = running_hidden_processes[device_id]
+    processHidden.terminate()
+    running_hidden_processes.pop(device_id, None)
 
 # 后端接口：接收RTSP流地址并开始处理
 @app.route('/realtime/play', methods=['POST'])
@@ -51,8 +93,7 @@ def play_video():
 
     # 创建新线程来处理视频流
     threading.Thread(target=process_video, args=(device_id, rtsp_url)).start()
-
-    return jsonify({"message": f"正在处理设备ID: {device_id}, 请稍等..."}), 200
+    return jsonify({"message": f"正在对设备ID: {device_id} 进行推理"}), 200
 
 
 # 接口：背景类型设置（通过路径参数设置背景类型）
@@ -105,7 +146,6 @@ def video_processing():
 
         # 保存进程对象到running_processes字典，便于后续终止
         running_processes['video'] = process
-
         return jsonify({"message": "正在处理视频文件: football1.mp4..."}), 200
     except subprocess.CalledProcessError as e:
         return jsonify({"error": f"调用视频文件处理时出错: {e}"}), 500
@@ -154,8 +194,12 @@ def stop_video():
     process.terminate()  # 发送终止信号
     running_processes.pop(device_id, None)  # 移除进程记录
 
+    processHidden = running_hidden_processes[device_id]
+    processHidden.terminate()
+    running_hidden_processes.pop(device_id, None)
+
     return jsonify({"message": f"设备ID {device_id} 的视频流处理已停止"}), 200
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=18085)
