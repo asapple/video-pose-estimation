@@ -142,7 +142,11 @@ def camera_video():
 def video_processing():
     try:
         # 使用subprocess.Popen来启动进程并保存进程对象
+<<<<<<< HEAD
         process = subprocess.Popen(["python", "pose-estimate.py", "--source", "football1.mp4", "--device", "cpu", "--device_id", "0"])
+=======
+        process = subprocess.Popen(["python", "pose-estimate.py", "--source", "football1.mp4", "--device", "0", "--device_id", "0"])
+>>>>>>> 31ec9b33bd28240129edf857fa487086d3ddf331
 
         # 保存进程对象到running_processes字典，便于后续终止
         running_processes['video'] = process
